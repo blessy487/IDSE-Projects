@@ -1,0 +1,297 @@
+
+==============================================================================
+1. PROBLEM DEFINITION AND DATA JUSTIFICATION
+==============================================================================
+
+Question : Can production and trade patterns help us understand India's food-price
+           trends, and can we forecast the Food CPI for the next 6 months?
+Target   : Monthly Food CPI index (2015 = 100)  -> regression / forecasting
+Extra    : "High inflation" (>= 6 % YoY) 3 months ahead -> classification
+Goals    : (a) beat naive baselines on a held-out 12-month test block,
+           (b) test statistically whether production/trade relate to inflation,
+           (c) deliver a 6-month forecast with an uncertainty band.
+
+  Food CPI             rows=   252  cols=17  source=FAOSTAT Consumer Price Indices  coverage=monthly 2016-01..2026-06
+  Crop production      rows= 15622  cols=15  source=FAOSTAT QCL (crops & livestock)  coverage=annual 1961..2024
+  Agricultural trade   rows= 12249  cols=15  source=FAOSTAT TCL (trade)  coverage=annual 2016..2024
+
+  Justification: three official, real-world FAOSTAT tables for one country, sharing 'Year' as a join key. CPI is monthly (126 points) which is enough for a time-series model; production/trade are annual and used for explanation.
+
+==============================================================================
+2. DATA PREPARATION - FOOD CPI
+==============================================================================
+  Items in file: ['Consumer Prices, Food Indices (2015 = 100)', 'Food price inflation']
+  Missing values in Value: 0
+  Duplicate (Item, Date) rows: 0
+  Flags: {'E': 126, 'X': 108, 'I': 18}  (X = external org., I = imputed, E = estimated)
+  Clean monthly series: Jan 2016 -> Jun 2026 (126 months, no gaps)
+  Consistency check: corr(provided YoY inflation, YoY recomputed from index) = 1.000
+  IQR outliers in MoM change (outside [-2.72, 3.47] %): 1
+               cpi  mom_pct
+Date                       
+2023-07-01  151.65     5.68
+  Decision: KEEP them. A single sharp month-on-month rise is a plausible food-price shock (e.g. a vegetable price spike), not a data error; removing it would hide exactly the kind of event we want to forecast.
+  WARNING: 18 index values (Jan 2025 - Jun 2026) are flagged 'I' (imputed by the data provider). The most recent 'truth' is therefore uncertain, and the held-out test block below falls inside this period.
+
+==============================================================================
+3. CROP PRODUCTION - CLEANING AND TRENDS
+==============================================================================
+  Elements available: ['Area harvested', 'Yield', 'Production']
+  Missing values (focus crops): 0 | duplicates: 0
+  Coverage 1961-2024; latest production (Mt): {'Maize (corn)': 40.2, 'Rice': 217.9, 'Wheat': 113.3, 'Total cereals': 371.4}
+
+  Production growth summary:
+               CAGR 2000-2024 %  CAGR 2014-2024 %  Worst YoY %  Worst year
+Item                                                                      
+Maize (corn)               5.16              5.25       -31.86        1971
+Rice                       2.26              3.15       -22.18        1965
+Wheat                      1.66              1.69       -15.20        1966
+Total cereals              2.29              2.87       -14.31        1965
+  [figure saved] 03_production_trends.png
+  [figure saved] 03_production_growth.png
+
+  Area vs yield contribution since 2000:
+              area x (2024/2000)  yield x (2024/2000)  production x (2024/2000)
+Rice                        1.12                 1.52                      1.71
+Wheat                       1.16                 1.28                      1.48
+Maize (corn)                1.70                 1.97                      3.35
+  Insight: production of all three cereals trends upward. For rice and wheat most of the gain is higher yield (area grew only modestly); maize grew through BOTH more area and higher yield. Year-to-year growth stays volatile (weather/monsoon).
+
+==============================================================================
+4. AGRICULTURAL TRADE - IMPORT / EXPORT ANALYSIS
+==============================================================================
+  Elements: ['Import quantity', 'Import value', 'Export quantity', 'Export value']
+  Missing: 0 | duplicates: 0 | flags: {'A': 12071, 'I': 144, 'E': 34}
+  Note: units differ by element (t, 1000 USD, head counts). We only combine elements with the SAME unit.
+  Focus-crop trade items used: {'Rice': 'Rice, paddy (rice milled equivalent)', 'Wheat': 'Wheat', 'Maize (corn)': 'Maize (corn)'}
+
+                         Rice  Wheat  Maize (corn)
+Import qty 2024 (Mt)    0.006  0.116         0.896
+Export qty 2024 (Mt)   17.877  0.072         0.501
+Net exports 2024 (Mt)  17.871 -0.044        -0.394
+  [figure saved] 04_trade_quantity_focus_crops.png
+  [figure saved] 04_trade_top_commodities.png
+  [figure saved] 04_trade_balance.png
+
+  Top import items : {'Palm oil': 67.0, 'Soya bean oil': 32.3, 'Sunflower-seed oil, crude': 21.4}
+  Top export items : {'Rice, milled': 71.3, 'Meat of buffalo, fresh or chilled': 29.9, 'Refined sugar': 16.0}
+  (The milled-equivalent rice aggregate is excluded from item rankings to avoid double counting.)
+  Insight: rice is India's big export crop (net exporter); wheat trade is small; maize is a small net import. The largest import bills are edible oils (palm, soya, sunflower) and pulses (beans, lentils, pigeon peas) - import pressure sits OUTSIDE the three focus cereals.
+
+==============================================================================
+5. EXPLORATORY DATA ANALYSIS - FOOD CPI
+==============================================================================
+          cpi  inflation_yoy  mom_pct
+count  126.00         126.00   125.00
+mean   129.41           4.61     0.38
+std     19.98           3.34     1.24
+min    101.73          -3.72    -2.66
+25%    109.52           2.28    -0.40
+50%    126.96           4.58     0.29
+75%    149.57           7.58     1.15
+max    164.11          12.16     5.68
+  [figure saved] 05_cpi_level_and_inflation.png
+  [figure saved] 05_cpi_seasonality.png
+  [figure saved] 05_cpi_distribution_acf.png
+
+  Insight 1: CPI rose from 102.9 to 163.5 (59% in ~10 years): a strong upward trend, so the level is non-stationary.
+  Insight 2: inflation peaked at 12.2% in Dec 2019 and was lowest (-3.7%) in Oct 2025.
+  Insight 3: 35% of months had food inflation >= 6%.
+  Insight 4: seasonality - average MoM change is highest in July (1.96%) and lowest in December (-0.78%).
+  Insight 5: ACF of the LEVEL stays near 1 for many lags (trend); monthly GROWTH has lag-1 autocorrelation 0.37, so modelling growth is the sensible route.
+
+==============================================================================
+6. INFERENTIAL STATISTICS AND HYPOTHESIS TESTING
+==============================================================================
+  Mean YoY food inflation = 4.61%  (95% CI 4.02% .. 5.20%)
+
+  T0 Shapiro-Wilk normality of MoM change
+     H0: MoM change is normally distributed
+     W = 0.977, p = 0.0293  ->  Reject H0  (non-normal -> prefer non-parametric tests)
+  (Levene equal-variance p=0.361; using pooled t-test)
+  T1 t-test: mean YoY inflation 2022+ vs 2016-2019
+     H0: mean inflation equal in both eras
+     t = 3.348, p = 0.0011  ->  Reject H0  (means 5.21% vs 3.12%)
+  T1b Mann-Whitney U (robustness)
+     H0: inflation distributions identical in both eras
+     U = 1852.000, p = 0.0002  ->  Reject H0
+  T2 One-way ANOVA: MoM change across calendar months
+     H0: mean MoM change same in all 12 months
+     F = 8.219, p = 0.0000  ->  Reject H0
+  T2b Kruskal-Wallis (robustness)
+     H0: MoM distributions same in all 12 months
+     H = 58.537, p = 0.0000  ->  Reject H0
+  T3 Linear trend in log CPI
+     H0: slope of log CPI on time = 0
+     t = 56.372, p = 0.0000  ->  Reject H0  (implied trend growth 5.1% per year, R2=0.962)
+
+  T4 Correlation with annual mean food inflation (annual data, small n!):
+                                  predictor  n  pearson_r  pearson_p  spearman_rho  spearman_p
+                     Rice production growth  9      0.092      0.814         0.133       0.732
+                    Wheat production growth  9     -0.186      0.633         0.017       0.966
+                    Maize production growth  9      0.615      0.078         0.617       0.077
+             Total cereal production growth  9      0.114      0.770         0.367       0.332
+Total cereal production growth (prev. year)  9     -0.291      0.447        -0.100       0.798
+       Wheat production growth (prev. year)  9     -0.346      0.361        -0.433       0.244
+              Cereal import-quantity growth  8      0.375      0.360         0.405       0.320
+              Cereal export-quantity growth  8      0.025      0.953         0.000       1.000
+  Bonferroni-adjusted alpha for 8 tests = 0.0063
+  T4 Pearson correlation (strongest predictor)
+     H0: no linear relation between 'Maize production growth' and inflation
+     r = 0.615, p = 0.0777  ->  Fail to reject H0  (n=9; Bonferroni alpha=0.0063)
+  T5 skipped: only 1 year(s) with falling cereal production in 2016-2024 - too few for a valid test.
+  [figure saved] 06_correlation_heatmap.png
+  [figure saved] 06_scatter_production_trade_vs_inflation.png
+
+  Interpretation: strong, significant findings are about the CPI series itself (clear upward trend; inflation regime differs by era). Links between annual cereal production/trade and inflation are weak/inconclusive with only 8-9 annual points - we report them as 'not established', NOT as proof of no effect.
+
+==============================================================================
+7. LINEAR REGRESSION - DO PRODUCTION / TRADE EXPLAIN FOOD INFLATION?
+==============================================================================
+  Sample: 8 years (2017-2024); validation = Leave-One-Out CV
+  Standardised coefficients (effect of +1 SD on inflation, in % points):
+cereal_prod_g        -0.776
+cereal_prod_g_lag1   -1.750
+import_qty_g          1.468
+  LOO-CV RMSE  linear model: 5.53   |  mean-only baseline: 2.90
+  In-sample R2: 0.468   LOO R2: -3.762
+  Verdict: The regression does NOT beat predicting the average -> annual production/trade growth carries no reliable out-of-sample signal for inflation in this sample.
+
+==============================================================================
+8. FORECASTING THE FOOD CPI
+==============================================================================
+  Observations: 126
+  Train      : Jan 2016 .. Jun 2024
+  Validation : Jul 2024 .. Jun 2025  (model selection)
+  Test       : Jul 2025 .. Jun 2026  (touched once, at the end)
+  Method: model the monthly GROWTH of the index (stationary) from its own lags + calendar month; rebuild the index by compounding. Multi-step forecasts are recursive.
+  Leakage control: features at time t use only data up to t-1; split is chronological; tuning uses TimeSeriesSplit inside the training block.
+
+  Tuning on training block (89 samples):
+    Linear Regression  (no tuning)           CV RMSE(growth)=0.01315
+    Ridge              best params {'m__alpha': np.float64(31.622776601683793)}  CV RMSE(growth)=0.01174
+    Random Forest      best params {'max_depth': 5, 'min_samples_leaf': 5}  CV RMSE(growth)=0.01184
+
+  Rolling-origin backtests: 7 validation origins, 7 test origins, each forecasting 6 months.
+
+  VALIDATION results (6-step recursive forecasts):
+                            MAE   RMSE  MAPE_%
+Baseline: naive           5.142  5.913   3.272
+Baseline: drift (12m)     6.667  8.575   4.278
+Baseline: seasonal x YoY  4.860  5.898   3.101
+Linear Regression         3.777  4.866   2.421
+Ridge                     4.228  5.321   2.708
+Random Forest             4.809  5.877   3.072
+Ensemble (avg of 3)       4.199  5.320   2.689
+
+  Selected model (lowest validation MAE among the ML models): Linear Regression
+
+  TEST results (held-out last 12 months, 6-step recursive forecasts):
+                            MAE   RMSE  MAPE_%
+Baseline: naive           1.657  2.016   1.036
+Baseline: drift (12m)     2.342  2.786   1.464
+Baseline: seasonal x YoY  5.704  6.768   3.566
+Linear Regression         2.586  2.884   1.619
+Ridge                     2.132  2.405   1.337
+Random Forest             2.002  2.517   1.257
+Ensemble (avg of 3)       2.153  2.454   1.350
+
+==============================================================================
+9. EVALUATION AND ERROR ANALYSIS
+==============================================================================
+  Test MAE by forecast horizon (index points):
+   Baseline: naive  Baseline: drift (12m)  Baseline: seasonal x YoY  Linear Regression  Ridge  Random Forest  Ensemble (avg of 3)
+h                                                                                                                                
+1             1.17                   1.22                      2.56               1.16   1.17           1.07                 1.13
+2             1.38                   1.79                      4.10               2.31   1.94           1.72                 1.94
+3             1.27                   1.88                      5.68               3.06   2.71           2.46                 2.77
+4             1.63                   2.45                      6.89               3.33   2.85           2.48                 2.96
+5             1.91                   2.92                      7.04               3.04   2.32           2.13                 2.32
+6             2.58                   3.79                      7.95               2.62   1.80           2.15                 1.79
+
+  Skill vs best baseline (positive = better than baseline, % MAE reduction):
+Baseline: naive               0.0
+Baseline: drift (12m)       -41.4
+Baseline: seasonal x YoY   -244.3
+Linear Regression           -56.1
+Ridge                       -28.7
+Random Forest               -20.8
+Ensemble (avg of 3)         -29.9
+
+  Best on test: Baseline: naive.  Selected on validation: Linear Regression.
+  HONEST CONCLUSION: the selected model does NOT beat the best baseline on the held-out test block (-56% MAE vs baseline). Validation and test disagree, which is common with ~100 monthly points, a regime change in 2025-26, and test data that the source itself imputed. We still report the model's forecast, but the 6-month numbers must be read with the wide uncertainty band, and the baseline is a serious rival.
+  Mean error (bias) of Linear Regression: -0.77 index points (under-forecasting on average)
+
+  Five largest errors of the selected model:
+target_date  h  actual   pred   err
+ 2026-02-01  4  160.23 155.75 -4.48
+ 2026-02-01  2  160.23 156.06 -4.17
+ 2026-01-01  3  160.80 156.65 -4.15
+ 2026-02-01  3  160.23 156.12 -4.12
+ 2026-03-01  5  159.71 155.72 -4.00
+  [figure saved] 09_evaluation.png
+  [figure saved] 09_feature_importance.png
+
+  Feature view (Linear Regression: effect of +1 SD on monthly growth (% points)):
+g_lag1      0.329
+g_lag3      0.121
+g_lag12     0.073
+g_mean12   -0.019
+g_mean3    -0.023
+sin_m      -0.380
+g_lag2     -0.494
+cos_m      -0.522
+
+Limitations and bias
+  * Only ~10 years of monthly data and a 12-month test block -> metrics are noisy.
+  * The final months of the series are IMPUTED by the source, so recent 'truth' is uncertain.
+  * Recursive forecasts accumulate error; accuracy falls with the horizon (see table above).
+  * Models use only the CPI's own history. Production/trade are annual and end in 2024, so they
+    cannot be used as monthly inputs for 2026 forecasts without further assumptions.
+  * Shocks (monsoon failure, export bans, COVID) are not predictable from past CPI alone.
+Next steps
+  * Add monthly rainfall, fuel prices and exchange-rate data as exogenous variables.
+  * Try SARIMA / ETS / gradient boosting and a larger rolling-origin cross-validation.
+  * Forecast sub-indices (cereals, vegetables, pulses) rather than the headline food index.
+
+
+==============================================================================
+10. LOGISTIC REGRESSION - WILL FOOD INFLATION BE >= 6% IN 3 MONTHS?
+==============================================================================
+  Class balance - train: 35% high | test: 17% high (train 93 / test 24 samples; gap of 3 months prevents label overlap)
+  Best C = 100  (time-series CV balanced accuracy 0.700)
+
+                          accuracy  balanced_acc  precision  recall     F1
+Logistic regression          0.708         0.625      0.286     0.5  0.364
+Baseline: persistence        0.708         0.625      0.286     0.5  0.364
+Baseline: majority class     0.833         0.500      0.000     0.0  0.000
+  ROC-AUC (logistic): 0.787
+
+  Odds ratio per +1 SD of each feature (>1 raises P(high inflation)):
+inflation_now          4.79
+inflation_change_3m    1.22
+avg_mom_growth_3m      0.98
+sin_month              1.05
+cos_month              0.87
+  [figure saved] 10_logistic_classifier.png
+
+  Interpretation: the logistic model does not beat the persistence baseline on balanced accuracy. Inflation regimes are sticky, so 'today's state' is a strong predictor; recall of the high class matters most if the goal is early warning.
+
+==============================================================================
+11. FINAL 6-MONTH FORECAST AND DASHBOARD
+==============================================================================
+  Final model: Linear Regression (refit on all 126 months). Band = +/-1.96 * sigma_1step * sqrt(h), sigma=0.0114 (log growth, out-of-fold).
+            forecast_cpi  lower_95  upper_95  implied_yoy_%
+date                                                       
+2026-07-01        165.95    162.29    169.69           5.03
+2026-08-01        167.69    162.49    173.06           5.51
+2026-09-01        168.86    162.46    175.50           6.66
+2026-10-01        169.41    162.03    177.14           7.22
+2026-11-01        169.26    161.04    177.91           6.60
+2026-12-01        168.52    159.57    177.98           6.40
+
+  Reading: from 163.5 in Jun 2026 the model projects 168.5 by Dec 2026 (95% band 159.6-178.0). The band is wide: treat this as a scenario, not a guarantee.
+  [figure saved] 11_forecast.png
+  [figure saved] 00_dashboard.png
+
+Done. Figures -> /mnt/user-data/outputs/food_price_project/outputs/figures | tables -> /mnt/user-data/outputs/food_price_project/outputs/results
