@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ocean Rescue – The Lost Ocean World</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#021128;font-family:"Trebuchet MS","Segoe UI",sans-serif;color:#e8fbff;display:flex;justify-content:center}
+#app{width:900px;max-width:100vw}
+#hud{display:flex;align-items:center;gap:10px;height:46px;padding:0 10px;background:#031a45;border-bottom:2px solid #1fb5c9;font-size:14px}
+#mis{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.st{white-space:nowrap}
+.ox{width:120px;height:18px;border:2px solid #7fe8ff;border-radius:9px;position:relative;overflow:hidden;background:#021128}
+.ox i{display:block;height:100%;background:linear-gradient(90deg,#3fe0d0,#7fe8ff);width:100%}.ox span{position:absolute;left:6px;top:0;font-size:11px;line-height:14px;font-weight:bold}
+#hud button{background:#0b6fa8;color:#fff;border:0;border-radius:8px;padding:6px 9px;cursor:pointer;font-size:14px}
+#stage{position:relative;width:900px;max-width:100vw;aspect-ratio:900/520}canvas#c{width:100%;height:100%;display:block}
+#ov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,17,40,.35)}
+.pn{background:rgba(3,26,69,.94);border:2px solid #3fe0d0;border-radius:18px;padding:16px 24px;max-width:800px;max-height:98%;overflow:auto;font-size:14px;line-height:1.45}
+.pn h2{margin:0 0 8px;color:#7fe8ff}.pn h1{margin:0;font-size:44px;color:#7fe8ff;text-shadow:0 0 18px #3fe0d0}
+.b,.b2{background:linear-gradient(#3fe0d0,#1fa5b9);color:#032;border:0;border-radius:12px;padding:9px 18px;font-weight:bold;font-size:15px;cursor:pointer;margin:6px 6px 0 0}
+.b2{background:#0b6fa8;color:#fff}.b:hover,.b2:hover{filter:brightness(1.15)}button:disabled{opacity:.4;cursor:not-allowed}
+table{border-collapse:collapse;width:100%;margin:6px 0;font-size:13px}th,td{border:1px solid #1d5f8c;padding:3px 7px;text-align:center}th{background:#0b3d6e}
+tr.bad td{background:#6b1d2a}select,input{font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.card{background:#0b3d6e;color:#fff;border:2px solid #3fe0d0;border-radius:12px;padding:10px;cursor:pointer;text-align:left;font-size:12px}
+.chip{display:inline-block;margin:3px;padding:4px 9px;border-radius:14px;background:#0b3d6e;border:2px solid #1d5f8c;cursor:pointer}.chip.m{border-color:#ffd23f;background:#5a4a10}.chip.o{border-color:#ff5e5e;background:#6b1d2a}.chip.z{box-shadow:0 0 0 2px #b565f0}
+.bar{height:16px;background:#021128;border-radius:8px;overflow:hidden;border:1px solid #3fe0d0;margin:4px 0}.bar i{display:block;height:100%;background:linear-gradient(90deg,#3fe0d0,#ff5e5e)}
+.big{font-size:20px;color:#ffd23f}.note{font-size:11px;color:#9cc}#msg{color:#ffd23f;min-height:20px;margin-top:4px}
+#toast{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(3,26,69,.92);border:2px solid #ffd23f;border-radius:12px;padding:7px 14px;font-size:13px;display:none;pointer-events:none;max-width:95%;text-align:center}
+</style></head><body>
+<div id="app">
+<div id="hud"><div id="mis"></div><div class="st">⭐ <b id="sc">0</b></div><div class="st">XP <b id="xp">0</b></div><div class="st" id="lv"></div><div class="ox"><i id="oxb"></i><span>O₂</span></div>
+<button id="bp" title="Pause (P)">⏸</button><button id="br" title="Restart level">↻</button><button id="bm" title="Mute (M)">🔊</button><button id="bh" title="Menu">☰</button></div>
+<div id="stage"><canvas id="c" width="900" height="520"></canvas><div id="ov"></div><div id="toast"></div></div>
+</div>
+<script>
+(()=>{
+const $=s=>document.querySelector(s),cv=$('#c'),g=cv.getContext('2d'),W=900,H=520,EF='"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+/* ================= SIMULATED DATASET ================= */
+let sd=7;const rnd=()=>(sd=(sd*1664525+1013904223)%4294967296)/4294967296,gs=()=>(rnd()+rnd()+rnd()+rnd()-2)*1.7;
+const RN=["Coral Bay","Kelp Coast","Reef Gate","Harbor Mouth","Plastic Gyre","Deep Blue"],PB=[18,25,20,45,70,12],TB=[22,19,24,23,26,17];
+const raw=[];
+for(let i=0;i<114;i++){const r=i%6,p=Math.max(2,PB[r]+i*.2+gs()*7),t=TB[r]+gs()*1.2+p*.01,o=8.5-.03*p+gs()*.35-(t-20)*.08,m=Math.round(520-3.2*p+gs()*25),z=(p-42)/12+(6.3-o)*1.2+(t-24)*.4+gs()*.5;
+ raw.push({id:r+1,t:+t.toFixed(1),o:+o.toFixed(2),p:+p.toFixed(1),m,h:z>0?"At Risk":"Healthy"});}
+[[3,190],[12,210],[22,175]].forEach(([i,p])=>{raw[i].p=p;raw[i].o=4.1;raw[i].m=120;raw[i].h="At Risk"}); // outliers
+raw[10].o=null;raw[20].t=null;raw[31].m=null;raw[44].o=null;raw[50].o=-4; // missing + incorrect
+raw.push({...raw[5]},{...raw[15]},{...raw[25]}); // duplicates (117 raw records)
+const seen=new Set(),dd=raw.filter(r=>{const k=JSON.stringify(r);if(seen.has(k))return false;seen.add(k);return true});
+const sum=a=>a.reduce((x,y)=>x+y,0),mean=a=>sum(a)/a.length,sdv=a=>{const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)**2)))};
+const med=a=>{a=[...a].sort((x,y)=>x-y);const n=a.length,h=n>>1;return n%2?a[h]:(a[h-1]+a[h])/2};
+const q=(a,p)=>{a=[...a].sort((x,y)=>x-y);const i=(a.length-1)*p,l=Math.floor(i);return a[l]+(a[Math.min(l+1,a.length-1)]-a[l])*(i-l)};
+const corr=(x,y)=>{const mx=mean(x),my=mean(y);return sum(x.map((v,i)=>(v-mx)*(y[i]-my)))/Math.sqrt(sum(x.map(v=>(v-mx)**2))*sum(y.map(v=>(v-my)**2)))};
+const okv=(k,r)=>r[k]!=null&&!(k=='o'&&r[k]<0),MED={};['t','o','p','m'].forEach(k=>MED[k]=med(dd.filter(r=>okv(k,r)).map(r=>r[k])));
+const D=dd.map(r=>{const c={...r};['t','o','p','m'].forEach(k=>{if(!okv(k,r))c[k]=+MED[k].toFixed(2)});return c}); // cleaned dataset
+const regs=RN.map((n,i)=>{const r=D.filter(x=>x.id==i+1),f=k=>mean(r.map(x=>x[k]));return{n,t:f('t'),o:f('o'),p:f('p'),m:f('m'),pr:0}});
+/* ---- Linear regression y=mx+c on survey means ---- */
+const survey=[];for(let b=0;b<9;b++)survey.push(mean(D.slice(b*12,b*12+12).filter(r=>r.p<120).map(r=>r.p)));
+const LIN=(()=>{const x=survey.map((_,i)=>i+1),mx=mean(x),my=mean(survey),m=sum(x.map((v,i)=>(v-mx)*(survey[i]-my)))/sum(x.map(v=>(v-mx)**2)),c=my-m*mx,pr=x.map(v=>m*v+c);
+ return{m,c,mae:mean(survey.map((y,i)=>Math.abs(y-pr[i]))),r2:1-sum(survey.map((y,i)=>(y-pr[i])**2))/sum(survey.map(y=>(y-my)**2))}})();
+/* ---- Logistic regression: sigmoid + gradient descent ---- */
+const F=['t','o','p'],mu=F.map(k=>mean(D.map(r=>r[k]))),sg=F.map(k=>sdv(D.map(r=>r[k]))),norm=v=>v.map((x,i)=>(x-mu[i])/sg[i]),sig=z=>1/(1+Math.exp(-z));
+const XA=D.map(r=>norm(F.map(k=>r[k]))),Y=D.map(r=>r.h=="At Risk"?1:0),tr=[],te=[];D.forEach((_,i)=>(i%5==4?te:tr).push(i));
+let W3=[0,0,0],B0=0,LOG={};
+const pz=z=>sig(B0+z.reduce((s,x,j)=>s+x*W3[j],0)),prob=(t,o,p)=>pz(norm([t,o,p]));
+function train(){W3=[0,0,0];B0=0;for(let e=0;e<600;e++){const gw=[0,0,0];let gb=0;tr.forEach(i=>{const er=pz(XA[i])-Y[i];XA[i].forEach((x,j)=>gw[j]+=er*x);gb+=er});W3=W3.map((w,j)=>w-.3*gw[j]/tr.length);B0-=.3*gb/tr.length}
+ const acc=ix=>mean(ix.map(i=>(pz(XA[i])>.5?1:0)==Y[i]?1:0)),loss=-mean(tr.map(i=>Y[i]*Math.log(pz(XA[i])+1e-9)+(1-Y[i])*Math.log(1-pz(XA[i])+1e-9)));
+ regs.forEach(r=>r.pr=prob(r.t,r.o,r.p));LOG={tr:acc(tr),te:acc(te),loss,w:[...W3],b:B0};return LOG}
+train();
+/* ================= STATE ================= */
+const KEY='oceanrescue_v1';let save;try{save=JSON.parse(localStorage[KEY])}catch(e){}save=save||{u:1,res:{},badges:[]};
+const persist=()=>{try{localStorage[KEY]=JSON.stringify(save)}catch(e){}};
+const LV=[["Ocean Explorer","Collect 5 water samples (SPACE near a bottle)","Data collection"],["Clean the Data","Fix missing values, duplicates, wrong readings","Data cleaning"],["Ocean Investigation","Explore regions: mean, median, correlation","EDA & statistics"],["Pollution Detective","Find outliers with IQR & Z-score","Outlier detection"],["Visualisation Lab","Choose the right graph","Data visualisation"],["Marine AI Prediction","Linear & logistic regression","Machine learning"],["Final Mission","Save the ocean with data-driven decisions","Full workflow"]];
+const BADGE={0:['🧪','First Sample'],1:['🧹','Data Cleaner'],2:['📈','Statistician'],3:['🔍','Pollution Detective'],4:['📊','Chart Master'],5:['🤖','AI Predictor'],6:['🐢','Turtle Savior']};
+const S={lv:0,mode:'menu',pts:0,lives:3,o2:100,samples:0,rescued:0,paused:false,t:0,clean:0,wt:0};
+const tot=()=>Object.values(save.res).reduce((s,r)=>s+r.pts,0),oth=()=>Object.keys(save.res).filter(k=>k!=S.lv).reduce((s,k)=>s+save.res[k].pts,0);
+const xpv=()=>Math.floor(tot()/2)+Object.keys(save.res).length*50,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),f2=(v,n=2)=>(+v).toFixed(n);
+const inPlay=()=>['play','over','win'].includes(S.mode);
+/* ================= AUDIO ================= */
+let AC,mute=0;
+const tone=(f,d=.15,ty='sine',v=.07)=>{if(mute)return;try{AC=AC||new AudioContext();AC.resume();const o=AC.createOscillator(),n=AC.createGain();o.type=ty;o.frequency.value=f;n.gain.value=v;o.connect(n);n.connect(AC.destination);o.start();n.gain.exponentialRampToValueAtTime(1e-4,AC.currentTime+d);o.stop(AC.currentTime+d)}catch(e){}};
+const jingle=()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.25),i*110));
+setInterval(()=>{if(S.mode!='menu')tone([262,330,392,440,523,392][Math.floor(T*.9)%6],.9,'sine',.018)},900);
+/* ================= UI HELPERS ================= */
+const ov=$('#ov'),panel=h=>{ov.innerHTML=h?`<div class="pn">${h}</div>`:'';ov.style.display=h?'flex':'none'};
+let tt;const toast=t=>{const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3800)};
+const badge=i=>{const b=BADGE[i];if(b&&!save.badges.includes(b[1])){save.badges.push(b[1]);toast(`🏅 Badge unlocked: ${b[0]} ${b[1]}`)}};
+function hud(){const pl=inPlay()||S.mode=='lab'||S.mode=='done';$('#sc').textContent=pl?oth()+S.pts:tot();$('#xp').textContent=xpv();
+ $('#lv').textContent='❤'.repeat(Math.max(0,S.lives))+'🖤'.repeat(Math.max(0,3-S.lives));$('#oxb').style.width=clamp(S.o2,0,100)+'%';$('#oxb').style.background=S.o2<25?'#ff5e5e':'';
+ let m='Welcome, explorer!';if(pl){m=`L${S.lv+1} ${LV[S.lv][0]}: `+(S.mode=='play'||S.mode=='over'?(S.lv==0?`🧪 ${S.samples}/5 samples · SPACE near bottle`:`🧪 ${S.samples}/5 · 🐢 hold SPACE near turtle (${turtle&&turtle.done?'rescued ✔':'trapped'})`):S.mode=='win'?'Restoring the ocean…':LV[S.lv][1])}
+ $('#mis').textContent=m;$('#hud').style.visibility=['menu','select'].includes(S.mode)?'hidden':'visible'}
+/* ================= WORLD ================= */
+let items=[],jel=[],rocks=[],dv,turtle=null,T=0,bubs=[];
+const fish=Array.from({length:10},(_,i)=>({x:rnd()*W,y:90+rnd()*340,v:(rnd()<.5?-1:1)*(25+rnd()*40),e:['🐠','🐟','🐡','🐠'][i%4],s:22+rnd()*14,ph:rnd()*6}));
+const amb=Array.from({length:30},()=>({x:rnd()*W,y:rnd()*H,r:2+rnd()*5,v:20+rnd()*30,ph:rnd()*6}));
+const cor=Array.from({length:14},(_,i)=>({x:30+i*65+rnd()*30,h:25+rnd()*45,col:['#ff6b9d','#ff9f43','#b565f0','#ff5e5e'][i%4]})),wd=Array.from({length:12},(_,i)=>({x:20+i*78+rnd()*30,h:50+rnd()*50}));
+function initWorld(lv){const R=(a,b)=>a+rnd()*(b-a);items=[];jel=[];bubs=[];
+ for(let i=0;i<5;i++)items.push({k:'s',x:110+i*165+R(-30,30),y:R(130,420),on:1});
+ for(let i=0;i<(lv?9:6);i++)items.push({k:'p',x:R(60,840),y:R(110,440),on:1,e:['🛍️','🥤','🍾','🥫'][i%4]});
+ for(let i=0;i<3;i++)items.push({k:'a',x:R(100,800),y:R(150,420),on:1});
+ for(let i=0;i<(lv?4:3);i++)jel.push({x:150+i*200+R(0,80),by:R(190,370),a:R(1,2),ph:R(0,6),vx:R(-25,25)||18,y:0});
+ rocks=[{x:250,y:480,r:34},{x:520,y:490,r:42},{x:760,y:475,r:30}];turtle=lv?{x:450,y:300,p:0,done:0}:null;dv={x:60,y:80,vx:0,vy:0,f:1,inv:0}}
+function sampleRow(n){return lvIs7()?D.filter(r=>r.id==5)[n*3]:D[(n*17+3)%D.length]}const lvIs7=()=>S.lv==6;
+function act(){let b=null,bd=58;items.forEach(i=>{if(!i.on||i.k=='a')return;const d=Math.hypot(dv.x-i.x,dv.y-i.y);if(d<bd){bd=d;b=i}});if(!b)return;b.on=0;
+ if(b.k=='s'){S.samples++;S.pts+=50;tone(880,.2);const r=sampleRow(S.samples);toast(`🧪 Sample ${S.samples}/5 · ${RN[r.id-1]} · Temp ${r.t}°C · O₂ ${r.o} mg/L · Plastic ${r.p} units`)}else{S.pts+=10;tone(500,.1)}}
+function hurt(oxy){if(S.mode!='play')return;S.lives--;dv.inv=1.6;tone(120,.35,'sawtooth',.1);if(oxy){S.o2=100;dv.x=60;dv.y=80;toast('Out of air! Surface to refill oxygen.')}else S.o2=Math.max(1,S.o2-10);
+ if(S.lives<=0){S.mode='over';panel('<h2>💔 Out of lives</h2><p>The ocean still needs you!</p><button class="b" data-a="retry">Try again</button><button class="b2" data-a="menu">Level select</button>')}}
+function upd(dt){S.t+=dt;const k=keys,tx=((k.ArrowRight?1:0)-(k.ArrowLeft?1:0))*190,ty=((k.ArrowDown?1:0)-(k.ArrowUp?1:0))*170;
+ dv.vx+=(tx-dv.vx)*Math.min(1,dt*7);dv.vy+=(ty-dv.vy)*Math.min(1,dt*7);dv.x=clamp(dv.x+dv.vx*dt,22,W-22);dv.y=clamp(dv.y+dv.vy*dt,30,H-50);if(tx)dv.f=Math.sign(tx);dv.inv=Math.max(0,dv.inv-dt);
+ if(dv.y<62)S.o2=Math.min(100,S.o2+45*dt);else S.o2-=2.2*dt;if(S.o2<=0)hurt(1);
+ rocks.forEach(r=>{const dx=dv.x-r.x,dy=dv.y-r.y,d=Math.hypot(dx,dy)||1;if(d<r.r+14){dv.x=r.x+dx/d*(r.r+14);dv.y=r.y+dy/d*(r.r+14)}});
+ jel.forEach(j=>{j.x+=j.vx*dt;if(j.x<60||j.x>840)j.vx*=-1;j.y=j.by+Math.sin(S.t*j.a+j.ph)*85;if(!dv.inv&&Math.hypot(dv.x-j.x,dv.y-j.y)<30)hurt()});
+ items.forEach(i=>{if(i.on&&i.k=='a'&&Math.hypot(dv.x-i.x,dv.y-i.y)<30){i.on=0;S.o2=Math.min(100,S.o2+35);tone(700,.12)}});
+ if(turtle){if(turtle.done)turtle.x+=90*dt;else if(keys.Space&&Math.hypot(dv.x-turtle.x,dv.y-turtle.y)<80){turtle.p+=dt/1.6;if(turtle.p>=1){turtle.done=1;S.rescued=1;S.pts+=150;jingle();toast('🐢 Turtle rescued! +150')}}else turtle.p=Math.max(0,turtle.p-dt*.5)}
+ if(Math.random()<dt*2.5)bubs.push({x:dv.x+dv.f*22,y:dv.y-8,r:2+Math.random()*3,life:2});bubs.forEach(b=>{b.y-=50*dt;b.life-=dt});bubs=bubs.filter(b=>b.life>0);
+ if(S.mode=='play'&&S.samples>=5&&(S.lv==0||turtle.done))setTimeout(()=>S.lv==0?done(0,'You collected all the water samples. Data collection complete!'):dec7(),S.lv==0?0:900),S.mode='pend'}
+/* ================= RENDER ================= */
+function em(e,x,y,s,fl=1,rot=0){g.save();g.translate(x,y);g.scale(fl,1);g.rotate(rot);g.font=s+'px '+EF;g.textAlign='center';g.textBaseline='middle';g.fillText(e,0,0);g.restore()}
+function bg(){const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#1fb5c9');gr.addColorStop(.35,'#0b6fa8');gr.addColorStop(1,'#031a45');g.fillStyle=gr;g.fillRect(0,0,W,H);
+ g.save();g.globalAlpha=.08;g.fillStyle='#fff';for(let i=0;i<5;i++){const x=i*210+Math.sin(T*.3+i)*40;g.beginPath();g.moveTo(x,0);g.lineTo(x+60,0);g.lineTo(x+180,H);g.lineTo(x+60,H);g.fill()}g.restore();
+ g.fillStyle='rgba(255,255,255,.3)';g.beginPath();g.moveTo(0,0);for(let x=0;x<=W;x+=20)g.lineTo(x,12+Math.sin(x*.05+T*2)*4);g.lineTo(W,0);g.fill();
+ g.fillStyle='#d8b37a';g.beginPath();g.moveTo(0,H);for(let x=0;x<=W;x+=30)g.lineTo(x,495+Math.sin(x*.02)*6);g.lineTo(W,H);g.fill();
+ g.lineCap='round';g.lineWidth=5;wd.forEach(w=>{g.strokeStyle='#2fbf71';g.beginPath();g.moveTo(w.x,497);g.quadraticCurveTo(w.x+Math.sin(T+w.x)*14,497-w.h*.5,w.x+Math.sin(T*1.2+w.x)*20,497-w.h);g.stroke()});
+ cor.forEach(c=>{g.strokeStyle=g.fillStyle=c.col;g.lineWidth=7;for(let b=-1;b<=1;b++){g.beginPath();g.moveTo(c.x,497);g.quadraticCurveTo(c.x+b*14,497-c.h*.6,c.x+b*26,497-c.h-Math.abs(b)*10);g.stroke();g.beginPath();g.arc(c.x+b*26,497-c.h-Math.abs(b)*10,6,0,7);g.fill()}})}
+function decor(dt){fish.forEach(f=>{f.x+=f.v*dt;if(f.x<-40)f.x=W+40;if(f.x>W+40)f.x=-40;em(f.e,f.x,f.y+Math.sin(T*2+f.ph)*8,f.s,f.v>0?-1:1)});
+ amb.forEach(b=>{b.y-=b.v*dt;if(b.y<-10){b.y=H+10;b.x=rnd()*W}g.strokeStyle='rgba(200,250,255,.6)';g.lineWidth=1.5;g.beginPath();g.arc(b.x+Math.sin(T+b.ph)*8,b.y,b.r,0,7);g.stroke()});
+ em('🐬',(T*70)%1200-150,110+Math.sin(T)*25,46,-1)}
+function jellyD(j){g.save();g.translate(j.x,j.y);g.fillStyle='rgba(255,120,200,.75)';g.beginPath();g.ellipse(0,0,24,18,0,Math.PI,0);g.fill();g.strokeStyle='rgba(255,160,220,.8)';g.lineWidth=3;for(let i=-2;i<=2;i++){g.beginPath();g.moveTo(i*9,0);g.quadraticCurveTo(i*9+Math.sin(T*4+i)*8,14,i*9,30);g.stroke()}g.restore()}
+function diverD(){const{x,y,f}=dv;g.save();g.translate(x,y);g.scale(f,1);if(dv.inv&&Math.floor(T*12)%2)g.globalAlpha=.4;g.rotate(clamp(dv.vy/300,-.5,.5));
+ const k=Math.sin(T*10)*(Math.abs(dv.vx)+Math.abs(dv.vy)>20?1:.3)*7;g.fillStyle='#ffd23f';g.beginPath();g.ellipse(-32,k,13,4.5,0,0,7);g.fill();g.beginPath();g.ellipse(-32,4-k,13,4.5,0,0,7);g.fill();
+ g.fillStyle='#9aa7b4';g.fillRect(-10,-19,18,10);g.fillStyle='#ff7b2e';g.beginPath();g.ellipse(-3,0,24,11,0,0,7);g.fill();g.strokeStyle='#ff7b2e';g.lineWidth=5;g.lineCap='round';g.beginPath();g.moveTo(8,4);g.lineTo(26,7);g.stroke();
+ g.fillStyle='#ffcf9f';g.beginPath();g.arc(21,-3,9,0,7);g.fill();g.fillStyle='#7fe8ff';g.strokeStyle='#fff';g.lineWidth=1.5;g.fillRect(23,-8,9,8);g.strokeRect(23,-8,9,8);g.restore()}
+function world(){g.lineWidth=1;rocks.forEach(r=>{g.fillStyle='#4a5568';g.beginPath();g.ellipse(r.x,r.y,r.r+6,r.r,0,0,7);g.fill();g.fillStyle='#718096';g.beginPath();g.ellipse(r.x-8,r.y-10,r.r*.5,r.r*.3,0,0,7);g.fill()});
+ items.forEach(i=>{if(!i.on)return;const by=Math.sin(T*2+i.x)*4;if(i.k=='s'){g.fillStyle=`rgba(255,255,160,${.25+.15*Math.sin(T*4)})`;g.beginPath();g.arc(i.x,i.y+by,22,0,7);g.fill();em('🧪',i.x,i.y+by,30)}else if(i.k=='p')em(i.e,i.x,i.y+by,26,1,Math.sin(T+i.x)*.3);else{g.strokeStyle='#fff';g.fillStyle='rgba(160,240,255,.3)';g.lineWidth=2;g.beginPath();g.arc(i.x,i.y+by,15,0,7);g.fill();g.stroke();g.font='bold 11px sans-serif';g.fillStyle='#fff';g.textAlign='center';g.fillText('O₂',i.x,i.y+by+4)}});
+ jel.forEach(jellyD);
+ if(turtle){em('🐢',turtle.x,turtle.y+(turtle.done?-Math.sin(T*2)*10:0),54,turtle.done?-1:1);if(!turtle.done){g.strokeStyle='#c9a66b';g.lineWidth=2;for(let i=-3;i<=3;i++){g.beginPath();g.moveTo(turtle.x-40,turtle.y+i*12);g.lineTo(turtle.x+40,turtle.y+i*12);g.moveTo(turtle.x+i*13,turtle.y-40);g.lineTo(turtle.x+i*13,turtle.y+40);g.stroke()}
+  if(turtle.p>0){g.fillStyle='#021128';g.fillRect(turtle.x-30,turtle.y-56,60,8);g.fillStyle='#3fe0d0';g.fillRect(turtle.x-30,turtle.y-56,60*turtle.p,8)}}}
+ bubs.forEach(b=>{g.strokeStyle='rgba(220,255,255,.8)';g.beginPath();g.arc(b.x,b.y,b.r,0,7);g.stroke()});diverD();
+ if(dv.y>62&&S.o2<30&&S.mode=='play'){g.fillStyle='#ff5e5e';g.font='bold 16px sans-serif';g.textAlign='center';g.fillText('Low oxygen! Swim to the surface or grab an O₂ bubble',W/2,50)}}
+function render(dt){bg();decor(dt);if(inPlay()||S.mode=='pend')world();
+ if(S.lv==6&&(inPlay()||S.mode=='pend'||S.mode=='lab'||S.mode=='done')){const a=.36*(1-S.clean);g.fillStyle=`rgba(75,62,25,${a})`;g.fillRect(0,0,W,H);g.globalAlpha=1-S.clean;for(let i=0;i<14;i++)em(['🛍️','🥤','🍾','🥫'][i%4],(i*97+T*18)%W,140+(i*53)%300+Math.sin(T+i)*10,24,1,T*.3+i);g.globalAlpha=1}
+ if(S.mode=='win'){const c=S.clean;g.globalAlpha=c;for(let k=0;k<6;k++){em('🐬',(T*90+k*190)%1100-100,260+Math.sin(T*2+k)*110,50,-1,Math.cos(T*2+k)*.4);em('🐢',(T*30+k*170)%1100-100,330+Math.sin(T+k)*60,46,-1);em(['🐠','🐟','🐡'][k%3],(T*50+k*150)%1000,150+Math.sin(T*1.5+k)*80+k*25,30,-1)}
+  g.globalAlpha=1;g.fillStyle=`rgba(255,255,255,${.9*c})`;g.font='bold 40px "Trebuchet MS"';g.textAlign='center';g.fillText('The ocean is clean again! 🌊',W/2,90)}}
+/* ================= LEVEL FLOW ================= */
+const labs={};
+function start(lv){S.lv=lv;S.pts=0;S.lives=3;S.o2=100;S.samples=0;S.rescued=0;S.paused=false;S.t=0;S.clean=0;S.att=0;panel(null);
+ if(lv==0||lv==6){S.mode='play';initWorld(lv);toast(lv?'Collect 5 samples, free the turtle (hold SPACE), then analyse the data.':'Arrow keys to swim · SPACE to collect bottles & plastic · Avoid jellyfish!')}else{S.mode='lab';labs[lv]()}}
+function done(lv,msg){const p=save.res[lv];if(!p||p.pts<S.pts)save.res[lv]={pts:S.pts,samples:S.samples,rescued:S.rescued};save.u=Math.max(save.u,Math.min(7,lv+2));badge(lv);persist();S.mode='done';jingle();
+ panel(`<h2>🎉 Level ${lv+1} complete!</h2><p>${msg}</p><p class="big">+${S.pts} points · concept: ${LV[lv][2]}</p>${lv<6?'<button class="b" data-a="next">Next level ▶</button>':''}<button class="b2" data-a="menu">Level select</button>`)}
+const T0=()=>`<p class="note">All ocean data in this game is <b>simulated</b> (synthetic).</p>`;
+/* --- Level 2 --- */
+const L2=[0,10,5,114,20,50,25,116,31,2];let rows2=[];
+labs[1]=()=>{rows2=L2.map(i=>{const r=raw[i];return{r,t:i>=114?'r':Object.values(r).some(v=>v==null)||r.o<0?'f':'k'}});
+ const v=x=>x==null?'<i style="color:#ff9">NaN</i>':x;
+ panel(`<h2>🔬 Level 2 · Clean the Data</h2><p>Lab sample of the raw dataset. Find <b>missing values</b>, <b>duplicate rows</b> and <b>impossible readings</b> (oxygen can't be negative), then choose an action for each row. Medians: Temp ${f2(MED.t,1)} · O₂ ${f2(MED.o)} · Pop ${f2(MED.m,0)}.</p>
+ <table><tr><th>#<th>Region<th>Temp<th>O₂<th>Plastic<th>Pop<th>Health<th>Action</tr>${rows2.map((x,n)=>`<tr id="r${n}"><td>${n+1}<td>${x.r.id}<td>${v(x.r.t)}<td>${v(x.r.o)}<td>${x.r.p}<td>${v(x.r.m)}<td>${x.r.h}<td><select><option value="k">Keep<option value="r">Remove row<option value="f">Fill with median</select></tr>`).join('')}</table>
+ <div id="msg"></div><button class="b" data-a="chk2">Check cleaning</button>${T0()}`)};
+/* --- Level 3 --- */
+labs[2]=()=>{S.rev=new Set();S.vr='p';d3()};
+function d3(){const all=S.rev.size==6,vn={t:'Temperature',o:'Dissolved oxygen',p:'Plastic pollution',m:'Marine population'},a=D.map(r=>r[S.vr]);
+ const cr=(x,y,n)=>{const r=corr(D.map(d=>d[x]),D.map(d=>d[y]));return`<tr><td>${n}<td>${f2(r,3)}<td>${Math.abs(r)>.7?'strong':Math.abs(r)>.4?'moderate':'weak'} ${r<0?'negative':'positive'}</tr>`};
+ panel(`<h2>🌊 Level 3 · Ocean Investigation</h2><p>Dive into each region to collect its averages, then analyse the full dataset (n=${D.length}).</p>
+ <table><tr><th>Region<th>Temp °C<th>O₂ mg/L<th>Plastic<th>Population</tr>${regs.map((r,i)=>S.rev.has(i)?`<tr><td>${r.n}<td>${f2(r.t,1)}<td>${f2(r.o)}<td>${f2(r.p,1)}<td>${f2(r.m,0)}</tr>`:`<tr><td>${r.n}<td colspan="4"><button class="b2" style="margin:0;padding:2px 10px" data-a="rev3" data-n="${i}">🤿 Dive & sample</button></tr>`).join('')}</table>
+ Variable: <select data-i="v3">${Object.keys(vn).map(k=>`<option value="${k}" ${k==S.vr?'selected':''}>${vn[k]}`).join('')}</select> → <b>Mean ${f2(mean(a))}</b> · <b>Median ${f2(med(a))}</b>
+ <table style="width:70%"><tr><th>Pair<th>Correlation r<th>Meaning</tr>${cr('t','p','Temperature–Pollution')}${cr('o','p','Oxygen–Pollution')}${cr('p','m','Pollution–Population')}</table>
+ ${all?`<p>Which region has the highest mean pollution? <select id="q3">${RN.map((n,i)=>`<option value="${i}">${n}`).join('')}</select> <button class="b" data-a="sub3">Submit</button></p>`:'<p class="note">Dive into all 6 regions to unlock the question.</p>'}<div id="msg"></div>`)}
+/* --- Level 4 --- */
+const V4=D.slice(0,30).map(r=>r.p);
+labs[3]=()=>{S.mark=new Set();S.ran=0;d4()};
+function d4(){const q1=q(V4,.25),q3=q(V4,.75),i=q3-q1,lo=q1-1.5*i,hi=q3+1.5*i,m=mean(V4),s=sdv(V4);S.o4=V4.map((v,n)=>(v<lo||v>hi)?n:-1).filter(n=>n>=0);S.z4=V4.map((v,n)=>Math.abs((v-m)/s)>2?n:-1).filter(n=>n>=0);
+ panel(`<h2>🕵️ Level 4 · Pollution Detective</h2><p>30 plastic-pollution readings from one region. <b>Click the readings that look abnormal</b>, then run the detectors.</p>
+ <div>${V4.map((v,n)=>`<span class="chip ${S.ran&&S.o4.includes(n)?'o':S.mark.has(n)?'m':''} ${S.ran&&S.z4.includes(n)?'z':''}" data-a="mk4" data-n="${n}">${v}</span>`).join('')}</div>
+ ${S.ran?`<table><tr><th>Q1<th>Q3<th>IQR<th>Lower fence<th>Upper fence<th>Mean<th>Std dev</tr><tr><td>${f2(q1,1)}<td>${f2(q3,1)}<td>${f2(i,1)}<td>${f2(lo,1)}<td>${f2(hi,1)}<td>${f2(m,1)}<td>${f2(s,1)}</tr></table>
+ <p>🔴 IQR rule (below Q1−1.5·IQR or above Q3+1.5·IQR): <b>${S.o4.map(n=>V4[n]).join(', ')||'none'}</b><br>🟣 Z-score rule (|z|&gt;2): <b>${S.z4.map(n=>V4[n]+' (z='+f2((V4[n]-m)/s)+')').join(', ')||'none'}</b></p><button class="b" data-a="cont4">Continue ▶</button>`:'<button class="b" data-a="run4">Run IQR & Z-score</button>'}`)}
+/* --- Level 5 --- */
+const T5=[{q:'Compare the <b>average plastic pollution of the 6 regions</b>.',a:'bar',lab:RN.map((n,i)=>'R'+(i+1)),y:regs.map(r=>r.p),yt:'Mean plastic'},
+ {q:'Show how <b>average pollution changed over 9 survey periods</b>.',a:'line',lab:survey.map((_,i)=>'S'+(i+1)),y:survey,yt:'Mean plastic'},
+ {q:'Show the <b>relationship between dissolved oxygen and pollution</b> (every record).',a:'scatter',xs:D.map(r=>r.o),y:D.map(r=>r.p),xt:'Dissolved O₂',yt:'Plastic'}];
+labs[4]=()=>{S.t5=0;S.ch=null;d5()};
+function d5(){const t=T5[S.t5];panel(`<h2>📊 Level 5 · Visualisation Lab (${S.t5+1}/3)</h2><p>Task: ${t.q} Pick the most suitable graph.</p>
+ <button class="b2" data-a="ch5" data-t="bar">Bar</button><button class="b2" data-a="ch5" data-t="line">Line</button><button class="b2" data-a="ch5" data-t="scatter">Scatter</button><br><canvas id="c5" width="560" height="260"></canvas><div id="msg">${S.ch?'':'Choose a chart to draw it.'}</div><button class="b" data-a="sub5">Submit graph</button>`);if(S.ch)chart($('#c5'),S.ch,t.xs,t.y,t.lab,{xt:t.xt,yt:t.yt})}
+function chart(c,type,xs,ys,lab,o={}){const x=c.getContext('2d'),w=c.width,h=c.height,L=48,Bm=34,Tm=14,Rm=14,n=ys.length;x.clearRect(0,0,w,h);x.fillStyle='rgba(255,255,255,.07)';x.fillRect(0,0,w,h);
+ const sc=type=='scatter'&&xs,x0=o.x0??(sc?Math.min(...xs):0),x1=o.x1??(sc?Math.max(...xs):n-1),y1=o.y1??Math.max(...ys)*1.1,px=sc?i=>L+((xs[i]??i)-x0)/((x1-x0)||1)*(w-L-Rm):i=>L+(i+.5)*(w-L-Rm)/n,py=v=>h-Bm-v/y1*(h-Bm-Tm);
+ x.strokeStyle='#7fe8ff';x.fillStyle='#cfe';x.font='11px sans-serif';x.textAlign='right';x.lineWidth=1;x.beginPath();x.moveTo(L,Tm);x.lineTo(L,h-Bm);x.lineTo(w-Rm,h-Bm);x.stroke();
+ for(let i=0;i<=4;i++){x.fillText(f2(y1*i/4,0),L-4,py(y1*i/4)+4)}x.textAlign='center';
+ if(lab&&n<=9)lab.forEach((l,i)=>x.fillText(l,px(i),h-Bm+14));if(sc){x.fillText(f2(x0,1),L,h-Bm+14);x.fillText(f2(x1,1),w-Rm,h-Bm+14)}if(o.xt)x.fillText(o.xt,w/2,h-4);if(o.yt){x.save();x.translate(10,h/2);x.rotate(-Math.PI/2);x.fillText(o.yt,0,0);x.restore()}
+ if(type=='bar'){x.fillStyle='#3fe0d0';const bw=Math.max(1,(w-L-Rm)/n*.7);ys.forEach((v,i)=>x.fillRect(px(i)-bw/2,py(v),bw,h-Bm-py(v)))}
+ else if(type=='line'){x.strokeStyle='#ffd23f';x.lineWidth=3;x.beginPath();ys.forEach((v,i)=>i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v)));x.stroke();x.fillStyle='#ffd23f';if(n<30)ys.forEach((v,i)=>{x.beginPath();x.arc(px(i),py(v),4,0,7);x.fill()})}
+ else{x.fillStyle='rgba(255,123,156,.8)';ys.forEach((v,i)=>{x.beginPath();x.arc(px(i),py(v),n>50?3:5,0,7);x.fill()})}return{px,py,x}}
+/* --- Level 6 --- */
+labs[5]=()=>{S.lin=0;S.lg=0;pA()};
+function pA(){panel(`<h2>🤖 Level 6A · Linear Regression</h2><p>Predict future pollution with <b>y = mx + c</b>. Each dot is a survey's mean plastic pollution (outliers excluded).</p><canvas id="c6" width="560" height="250"></canvas><div id="o6">Press train to fit the line (least squares).</div>
+ <button class="b" data-a="trL">Train model</button><span id="sl6" style="display:none">Predict survey # <input type="range" min="10" max="15" value="10" data-i="pr6"> <b id="pv6"></b></span><button class="b2" id="nxt" data-a="toB" style="display:none">Challenge B ▶</button>`);dr6(0)}
+function dr6(p){const c=$('#c6');if(!c)return;const yy=Math.max(LIN.m*15+LIN.c,...survey)*1.1,r=chart(c,'scatter',survey.map((_,i)=>i+1),survey,null,{x0:1,x1:15,y1:yy,xt:'Survey number',yt:'Mean plastic'});
+ if(S.lin){const x=r.x;x.strokeStyle='#3fe0d0';x.lineWidth=3;x.beginPath();x.moveTo(r.px(0),r.py(LIN.m*1+LIN.c));x.lineTo(r.px(14),r.py(LIN.m*15+LIN.c));x.stroke();
+  for(let n=10;n<=15;n++){x.strokeStyle=n==p?'#ffd23f':'#3fe0d0';x.lineWidth=2.5;x.beginPath();x.arc(r.px(n-1),r.py(LIN.m*n+LIN.c),n==p?8:4,0,7);x.stroke()}}}
+function pB(){panel(`<h2>🤖 Level 6B · Logistic Regression</h2><p>Classify a region as <b>Healthy</b> or <b>At Risk</b> from temperature, dissolved oxygen and pollution. Uses the sigmoid function and gradient descent (600 steps, 80/20 train/test split).</p><div id="o7">Model not trained yet.</div><button class="b" data-a="trG">Train model</button>
+ <div id="sm" style="display:none"><br>Temp <input type="range" min="10" max="32" step=".5" value="24" data-i="lg" id="s1"> <b id="v1"></b><br>Oxygen <input type="range" min="3" max="10" step=".1" value="6.5" data-i="lg" id="s2"> <b id="v2"></b><br>Plastic <input type="range" min="0" max="120" step="1" value="60" data-i="lg" id="s3"> <b id="v3"></b><div class="bar"><i id="pb"></i></div><div id="pc" class="big"></div></div><button class="b2" id="fin" data-a="fin6" style="display:none">Finish level ▶</button>`)}
+function up7(){const t=+$('#s1').value,o=+$('#s2').value,p=+$('#s3').value,pr=prob(t,o,p);$('#v1').textContent=t+'°C';$('#v2').textContent=o+' mg/L';$('#v3').textContent=p;$('#pb').style.width=pr*100+'%';$('#pc').textContent=(pr>.5?'⚠ At Risk':'✅ Healthy')+` · P(At Risk) = ${f2(pr*100,1)}%`}
+/* --- Level 7 decision --- */
+function dec7(){S.mode='lab';const opts=RN.map((n,i)=>`<option value="${i}">${n}`).join('');
+ panel(`<h2>🧭 Final analysis</h2><p>Use your earlier analysis to choose where cleanup matters most.</p><table><tr><th>Region<th>Mean plastic<th>Mean O₂<th>Model P(At Risk)</tr>${regs.map(r=>`<tr><td>${r.n}<td>${f2(r.p,1)}<td>${f2(r.o)}<td>${f2(r.pr*100,1)}%</tr>`).join('')}</table>
+ <p>📈 Linear forecast: survey 10 → ${f2(LIN.m*10+LIN.c,1)}, survey 12 → ${f2(LIN.m*12+LIN.c,1)} (pollution keeps rising). Logistic model test accuracy: ${f2(LOG.te*100,0)}%.</p>
+ Most polluted region (highest mean): <select id="q1">${opts}</select><br>Cleanup priority (highest predicted risk): <select id="q2">${opts}</select><br><button class="b" data-a="sub7">Start restoration 🌊</button><div id="msg"></div>`)}
+const winPanel=()=>panel(`<h1 style="font-size:30px">OCEAN SAVED!<br>YOU ARE A MARINE HERO!</h1><p>Score ${tot()} · ${save.badges.length} badges</p><button class="b" data-a="results">View Results</button><button class="b2" data-a="again">Play Again</button>`);
+function results(){S.mode='results';const R=Object.values(save.res),n=tot(),rank=n>=1800?'🏆 Ocean Legend':n>=1300?'🥇 Marine Hero':n>=800?'🥈 Reef Ranger':'🥉 Rookie Diver';
+ const ch=[1,2,3,4,5].filter(k=>save.res[k]).length+(save.res[5]?1:0)+(save.res[6]?1:0);
+ panel(`<h2>🏁 Final Results</h2><table style="width:100%"><tr><td>Total score<td><b>${n}</b><td>Levels completed<td><b>${R.length}/7</b></tr><tr><td>Water samples collected<td><b>${sum(R.map(r=>r.samples))}</b><td>Marine animals rescued<td><b>${sum(R.map(r=>r.rescued))}</b></tr><tr><td>Pollution challenges<td><b>${ch}</b><td>Final rank<td><b>${rank}</b></tr></table>
+ <p>📈 <b>Linear Regression:</b> y = ${f2(LIN.m)}x + ${f2(LIN.c)} · MAE ${f2(LIN.mae)} · R² ${f2(LIN.r2,3)}<br>🤖 <b>Logistic Regression:</b> train accuracy ${f2(LOG.tr*100,1)}% · test accuracy ${f2(LOG.te*100,1)}% · loss ${f2(LOG.loss,3)}</p>
+ <p>🎓 <b>Concepts learned:</b> ${LV.map(l=>l[2]).join(' · ')}</p><p>🏅 ${save.badges.map(b=>Object.values(BADGE).find(x=>x[1]==b)[0]+' '+b).join(' &nbsp; ')||'No badges yet'}</p>
+ <div class="big">OCEAN SAVED! YOU ARE A MARINE HERO!</div><button class="b" data-a="again">Play Again</button><button class="b2" data-a="menu">Main menu</button>`)}
+function menu(){S.mode='menu';panel(`<h1>🐢 OCEAN RESCUE</h1><h2 style="margin-top:4px">The Lost Ocean World</h2><p>Dive in, collect data, and use Data Science to save the sea.</p><button class="b" data-a="sel">▶ Play Game</button><button class="b2" data-a="inst">Instructions</button>${save.res[6]?'<button class="b2" data-a="results">View Results</button>':''}`)}
+function sel(){S.mode='select';panel(`<h2>Choose a level</h2><div class="grid">${LV.map((l,i)=>`<button class="card" data-a="go" data-l="${i}" ${i>=save.u?'disabled':''}><b>${i<save.u?'🌊':'🔒'} Level ${i+1}</b><br>${l[0]}<br><span style="color:#9cc">${l[2]}</span>${save.res[i]?'<br>⭐ '+save.res[i].pts:''}</button>`).join('')}</div><button class="b2" data-a="menu">◀ Back</button>`)}
+const acts={sel,menu,results,
+ inst:()=>panel(`<h2>How to play</h2><p>⬅➡⬆⬇ <b>Arrow keys</b> swim · <b>SPACE</b> collect bottles/plastic (hold near the turtle to free it) · <b>P</b> pause · <b>M</b> mute.<br>Oxygen drains underwater: surface or grab O₂ bubbles. Jellyfish cost a life (3 lives).<br>Levels 2–6 are underwater labs where you clean data, compute statistics, spot outliers, draw graphs and train two real ML models. Level 7 ties it together.<br>Progress is saved automatically. All data is <b>simulated</b>.</p><button class="b" data-a="sel">▶ Play</button><button class="b2" data-a="menu">Back</button>`),
+ go:b=>start(+b.dataset.l),next:()=>start(S.lv+1),retry:()=>start(S.lv),resume:()=>{S.paused=false;panel(null)},
+ again:()=>{save={u:1,res:{},badges:[]};persist();sel()},
+ chk2:()=>{S.att++;let bad=0;[...document.querySelectorAll('#ov tr[id]')].forEach((tr,n)=>{const ok=tr.querySelector('select').value==rows2[n].t;tr.className=ok?'':'bad';if(!ok)bad++});
+  if(bad)$('#msg').textContent=`${bad} row(s) still wrong. Hint: duplicates → remove; missing or impossible values → fill with median.`;else{S.pts=Math.max(100,200-(S.att-1)*30);done(1,'Dataset cleaned: 117 raw rows → 114 unique rows with no missing values.')}},
+ rev3:b=>{S.rev.add(+b.dataset.n);S.pts+=10;tone(600,.1);d3()},
+ sub3:()=>{const best=regs.reduce((b,r,i)=>r.p>regs[b].p?i:b,0);if(+$('#q3').value==best){S.pts+=150;done(2,`${RN[best]} has the highest mean pollution (${f2(regs[best].p,1)}).`)}else $('#msg').textContent='Not quite — compare the mean Plastic column.'},
+ mk4:b=>{if(S.ran)return;const n=+b.dataset.n;S.mark.has(n)?S.mark.delete(n):S.mark.add(n);d4()},
+ run4:()=>{S.ran=1;d4();const ok=S.o4.filter(n=>S.mark.has(n)).length,fp=S.mark.size-ok;S.pts=Math.max(0,50+ok*50-fp*15);toast(`You found ${ok}/${S.o4.length} outliers (false alarms: ${fp})`)},
+ cont4:()=>done(3,`IQR flagged ${S.o4.length} outliers; Z-score flagged ${S.z4.length}.`),
+ ch5:b=>{S.ch=b.dataset.t;d5()},
+ sub5:()=>{const t=T5[S.t5];if(!S.ch){$('#msg').textContent='Pick a graph first.';return}if(S.ch==t.a){S.pts+=50;tone(800,.15);if(++S.t5>=3)done(4,'You matched each question to the right graph: bar to compare, line for trends, scatter for relationships.');else{S.ch=null;d5()}}else $('#msg').textContent='That graph hides the story. Think: comparing, trend over time, or relationship?'},
+ trL:()=>{if(!S.lin){S.lin=1;S.pts+=100}$('#o6').innerHTML=`<b>y = ${f2(LIN.m)}x + ${f2(LIN.c)}</b> · MAE = ${f2(LIN.mae)} · R² = ${f2(LIN.r2,3)}`;$('#sl6').style.display='inline';$('#nxt').style.display='inline-block';ins.pr6($('#sl6 input'))},
+ toB:()=>pB(),
+ trG:()=>{train();if(!S.lg){S.lg=1;S.pts+=100}$('#o7').innerHTML=`Weights (temp, O₂, plastic): ${LOG.w.map(w=>f2(w,2)).join(', ')} · bias ${f2(LOG.b,2)}<br>Loss ${f2(LOG.loss,3)} · Train accuracy ${f2(LOG.tr*100,1)}% · <b>Test accuracy ${f2(LOG.te*100,1)}%</b>`;$('#sm').style.display='block';$('#fin').style.display='inline-block';up7()},
+ fin6:()=>{save.lin=LIN;save.log=LOG;done(5,`Linear R² = ${f2(LIN.r2,3)}; Logistic test accuracy = ${f2(LOG.te*100,1)}%.`)},
+ sub7:()=>{const best=regs.reduce((b,r,i)=>r.p>regs[b].p?i:b,0),risk=regs.reduce((b,r,i)=>r.pr>regs[b].pr?i:b,0);
+  if(+$('#q1').value==best&&+$('#q2').value==risk){S.pts+=200;save.res[6]={pts:S.pts,samples:S.samples,rescued:S.rescued};save.u=7;badge(6);persist();S.mode='win';S.wt=0;S.shown=0;panel(null);jingle()}else $('#msg').textContent='Check the table: the most polluted region has the highest mean plastic; the priority has the highest predicted risk.'}};
+const ins={v3:e=>{S.vr=e.value;d3()},pr6:e=>{const n=+e.value;$('#pv6').textContent=`Survey ${n}: ${f2(LIN.m*n+LIN.c,1)}`;dr6(n)},lg:up7};
+ov.onclick=e=>{const b=e.target.closest('[data-a]');if(b&&!b.disabled)acts[b.dataset.a](b)};ov.oninput=ov.onchange=e=>{const b=e.target.closest('[data-i]');if(b)ins[b.dataset.i](b)};
+/* ================= INPUT ================= */
+const keys={};
+addEventListener('keydown',e=>{try{AC=AC||new AudioContext();AC.resume()}catch(_){}
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)&&(S.mode=='play'||S.mode=='pend'))e.preventDefault();
+ if(e.key==' '){keys.Space=1;if(S.mode=='play'&&!S.paused&&!e.repeat)act()}else keys[e.key]=1;
+ if(e.key=='p'||e.key=='P')pause();if(e.key=='m'||e.key=='M')mt()});
+addEventListener('keyup',e=>{if(e.key==' '){keys.Space=0;if(S.mode=='play')e.preventDefault()}else keys[e.key]=0});
+function pause(){if(S.mode=='play'){S.paused=!S.paused;panel(S.paused?'<h2>⏸ Paused</h2><button class="b" data-a="resume">Resume</button>':null)}}
+function mt(){mute=!mute;$('#bm').textContent=mute?'🔇':'🔊'}
+$('#bp').onclick=e=>{pause();e.target.blur()};$('#bm').onclick=e=>{mt();e.target.blur()};
+$('#br').onclick=e=>{e.target.blur();if(!['menu','select','results'].includes(S.mode))start(S.lv)};$('#bh').onclick=e=>{e.target.blur();S.paused=false;sel()};
+/* ================= LOOP ================= */
+let last=0;
+function loop(ts){const dt=Math.min(.05,(ts-last)/1000||0);last=ts;T+=dt;
+ if(S.mode=='play'&&!S.paused)upd(dt);else if(S.mode=='pend')upd(0);
+ if(S.mode=='win'){S.wt+=dt;S.clean=Math.min(1,S.wt/4);if(S.wt>7&&!S.shown){S.shown=1;winPanel()}}
+ render(dt);hud();requestAnimationFrame(loop)}
+menu();requestAnimationFrame(loop);
+})();
+</script></body></html>
