@@ -1,0 +1,8 @@
+test,H0,statistic,p_value,decision,note
+T0 Shapiro-Wilk normality of MoM change,MoM change is normally distributed,W=0.977,0.0293254364513322,Reject H0,non-normal -> prefer non-parametric tests
+T1 t-test: mean YoY inflation 2022+ vs 2016-2019,mean inflation equal in both eras,t=3.348,0.0011496121423615925,Reject H0,means 5.21% vs 3.12%
+T1b Mann-Whitney U (robustness),inflation distributions identical in both eras,U=1852.000,0.00019589840004432044,Reject H0,
+T2 One-way ANOVA: MoM change across calendar months,mean MoM change same in all 12 months,F=8.219,1.9615551746885671e-10,Reject H0,
+T2b Kruskal-Wallis (robustness),MoM distributions same in all 12 months,H=58.537,1.7312209656711354e-08,Reject H0,
+T3 Linear trend in log CPI,slope of log CPI on time = 0,t=56.372,3.102719557214539e-90,Reject H0,"implied trend growth 5.1% per year, R2=0.962"
+T4 Pearson correlation (strongest predictor),no linear relation between 'Maize production growth' and inflation,r=0.615,0.07766714682357573,Fail to reject H0,n=9; Bonferroni alpha=0.0063
